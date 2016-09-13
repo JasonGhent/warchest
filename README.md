@@ -8,10 +8,10 @@ It assumes we're using the [Simple Authorization](https://github.com/yadayada/ac
 Install acdcli via python pip, and initialize it
 
 [OSX]  
-$ brew install python3 && pip3 install acdcli && acd_cli sync
+`$ brew install python3 && pip3 install acdcli && acd_cli sync`
 
 [DEB]  
-$ apt-get install -y python3-pip && pip install acdcli && acd_cli sync
+`$ apt-get install -y python3-pip && pip install acdcli && acd_cli sync`
 
 Place the resulting token in your import directory, i.e. ./import/oauth_token
 
