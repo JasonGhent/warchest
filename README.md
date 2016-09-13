@@ -28,8 +28,8 @@ Place the resulting token in your import directory, i.e. ./import/oauth_token
 
 ### Install
 [OSX]  
-`$ ENC_PASSWORD=your_password ./osx-layer.sh <optional_host_system_symlink>`
-`optional_host_system_symlink` defaults to ~/Desktop/$NAME
+`$ ENC_PASSWORD=your_password ./osx-layer.sh <optional_host_system_symlink>`  
+(`optional_host_system_symlink` defaults to ~/Desktop/$NAME)
 
 [DEB]  
 `$ ENC_PASSWORD=your_password ./import/infinite-data-backup.sh`
