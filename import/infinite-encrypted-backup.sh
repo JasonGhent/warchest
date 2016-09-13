@@ -73,8 +73,7 @@ acd_cli sync
 mkdir /var/run/sshd
 sed -ri 's/^PermitRootLogin\s+.*/PermitRootLogin yes/' /etc/ssh/sshd_config
 sed -ri 's/UsePAM yes/#UsePAM yes/g' /etc/ssh/sshd_config
-#service ssh restart
-service ssh stop
+service ssh restart
 
 # this avoids logfile requirement of daemonizing (-d) inotifywait:
 # Script ignores system files when syncing
