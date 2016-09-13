@@ -1,0 +1,5 @@
+.DS_Store
+*.sw[o|p]
+import/oauth_data
+import/ACD_DATA_KEY
+amazon-cloud-drive
