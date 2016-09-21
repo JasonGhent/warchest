@@ -1,5 +1,4 @@
 #!/bin/bash
-
 #FIXME: trap SIGINT SIGTERM and kill script. Recursive calls are preventing
 #       termination
 
@@ -60,7 +59,6 @@ docker run \
   -e "IMPORT_DIR=$IMPORT_DIR" \
   -e "KEY=$IMPORT_DIR/ACD_DATA_KEY" \
   -e "OAUTH_DATA=$IMPORT_DIR/oauth_data" \
-  -e "SYNC_MONITORS=create,modify,move,delete" \
   -v "$PWD""$IMPORT_DIR":"$IMPORT_DIR" \
   -w "$IMPORT_DIR" \
   --privileged --cap-add=ALL \

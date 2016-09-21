@@ -14,11 +14,6 @@ DEC_AMZN_DIR="/$AMZN_DIR"
 FUSED_DIR="/$NAME"
 ENCRYPT_PW="echo $ENC_PASSWORD"
 
-# install dependencies (ideally, already handled by dockerfile)
-apt-get update -y
-apt-get install -y unionfs-fuse encfs openssh-server inotify-tools python3-pip
-pip3 install --upgrade --pre acdcli
-
 # make directories to be used
 mkdir -p "$DEC_DATA_DIR" "$ENC_DATA_DIR" "$DEC_AMZN_DIR" "$ENC_AMZN_DIR" "$FUSED_DIR" ~/.cache/acd_cli
 
@@ -48,63 +43,7 @@ acd_cli mount $ENC_AMZN_DIR
 # setup decryption layer for amzn dir
 ENCFS6_CONFIG="$KEY" encfs --extpass="$ENCRYPT_PW" $ENC_AMZN_DIR $DEC_AMZN_DIR
 
-# CRUD handler for acd_cli
-echo -e '#!'"/bin/bash
-FILENAME=\$(echo \$1 | cut -d/ -f3-)
-ACTION=\$(echo \$1 | cut -d- -f2 | tr -d ' ')
-ENCODEDIR=\$(ENCFS6_CONFIG=\"$KEY\" encfsctl encode --extpass=\"$ENCRYPT_PW\" $ENC_DATA_DIR \"/\$FILENAME\")
-REALPATH=\"$ENC_DATA_DIR/\$ENCODEDIR\"
-
-echo -e \"(\$\$) Filepath:\t/\$FILENAME\"
-echo -e \"(\$\$) Action:\t\$ACTION\"
-echo -e \"(\$\$) Realpath:\t\$REALPATH\"
-
-# sync exact file to update or remove
-if [[ \$1 != *\" - DELETE\"* && \$1 != *\"MOVED_FROM\"* ]]; then
-  echo \"(\$\$) Uploading file: \$FILENAME @ \$REALPATH\"
-  acd_cli upload \$REALPATH /
-else
-  echo \"(\$\$) Removing file: \$FILENAME @ \$REALPATH\"
-  rm -r \$REALPATH
-  acd_cli rm /\$ENCODEDIR
-fi
-acd_cli sync" > /bin/acd-sync
-chmod +x /bin/acd-sync;
-
-# pull remote file references to initialize. nothing to push up yet.
-acd_cli sync
-
-# setup ssh for exposure to host's sshfs mount
-mkdir /var/run/sshd
-sed -ri 's/^PermitRootLogin\s+.*/PermitRootLogin yes/' /etc/ssh/sshd_config
-sed -ri 's/UsePAM yes/#UsePAM yes/g' /etc/ssh/sshd_config
-service ssh restart
-
-# Script does the following:
-#   - ignores system files when syncing
-#     TODO: use array instead of so many shitty nested conditionals
-#   - kills any sync (aka upload) processes that are in-progress for a file when
-#     that file is modified again, even if the first upload was not yet complete
-#     this is a janky attempt at debouncing when the filesystem updates a lot.
-#     TODO: is there any way to prevent metadata updates from triggering a full
-#           file re-upload, uploading new/modified metadata only?
-# NOTE: this (-m) implementation avoids logfile requirement of daemonizing (-d)
-inotifywait -mre "$SYNC_MONITORS" --timefmt '%G' --format '%T - %e - %w%f' \
-  "$FUSED_DIR" | while read -r FILE; do \
-    if [[ $FILE != *"/.TemporaryItems"* ]]; then \
-      if [[ $FILE != *"DS_Store"* ]]; then \
-        if [[ $FILE != *"/._"* ]]; then \
-          if [[ $FILE != *"_HIDDEN~"* ]]; then \
-            if [[ $FILE != *"/.unionfs-fuse"* ]]; then \
-              PIDS=$(jobs -p 2>/dev/null | xargs ps -p 2>/dev/null | tail -n+2 | awk '{print $1,substr($0, index($0, $5))}' | grep "$FILE" | awk '{print $1}' | tr '\n' ' '); \
-              if [[ $PIDS ]]; then echo "File sync already in progress. Killing PIDS: $PIDS"; kill -9 $PIDS; fi; \
-              /bin/acd-sync "$FILE" & \
-            fi; \
-          fi; \
-        fi; \
-      fi; \
-    fi; \
-  done;
+DEC_DATA_DIR="$ENC_DATA_DIR" ENCRYPT_PW="$ENCRYPT_PW" KEY="$KEY" ENC_DATA_DIR="$ENC_DATA_DIR" FUSED_DIR="$FUSED_DIR" nodejs /app/index.js
 
 # TODO Cron job to delete files older than two weeks:
 #   0 4 * * * find $ENC_DATA_DIR -type f -mtime +14 -exec rm -rf {} \;
