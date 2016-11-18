@@ -1,20 +1,7 @@
 #!/bin/bash
+#FIXME: replace sshfs with rsync (native to macos)
 #FIXME: trap SIGINT SIGTERM and kill script. Recursive calls are preventing
 #       termination
-
-NAME=${NAME:-amazon-cloud-drive}
-PLACE_SYMLINK_AT=${1:-$HOME/Desktop/}
-IMPORT_DIR=${IMPORT_DIR:-/import}
-SSH_PORT=1234
-# helps host manage guest (container)
-SSH_OPTS="NoHostAuthenticationForLocalhost=yes"
-PWD=$(pwd)
-
-which sshfs > /dev/null
-if [[ $? -gt 0 ]]; then
-  echo "sshfs must be installed on the host (osx) system"
-  return 1
-fi
 
 echo "# !!Warning!!
 # - this script will replace any existing docker image tagged name:$NAME
@@ -31,7 +18,31 @@ read -r -p "Are you sure? [Y/n]" RESPONSE
 RESPONSE=$(echo "$RESPONSE" | tr "[:upper:]" "[:lower:]")
 echo "$RESPONSE"
 if [[ ! $RESPONSE =~ ^(yes|y| ) ]]; then
-  return 1;
+  exit 1;
+fi
+
+if [ -z "$ENC_PASSWORD" ]; then
+  read -s -p "Please enter an encryption password: " ENC_PASSWORD
+fi
+
+NAME=${NAME:-amazon-cloud-drive}
+PLACE_SYMLINK_AT=${PLACE_SYMLINK_AT:-$HOME/Desktop/}
+IMPORT_DIR=${IMPORT_DIR:-/import}
+SSH_PORT=1234
+# helps host manage guest (container)
+SSH_OPTS="NoHostAuthenticationForLocalhost=yes"
+PWD=$(pwd)
+
+which sshfs > /dev/null
+if [[ $? -gt 0 ]]; then
+  /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+  brew cask install osxfuse
+  brew install homebrew/fuse/sshfs
+fi
+which sshfs > /dev/null
+if [[ $? -gt 0 ]]; then
+  echo "brew installation of sshfs failed. Read stderr/stdout above."
+  exit 1;
 fi
 
 PUB_KEY="$HOME/.ssh/id_rsa.pub"
@@ -74,8 +85,28 @@ INSERT_KEY+=" && echo '$(cat "$PUB_KEY")' >> /root/.ssh/authorized_keys"
 
 echo "Waiting for docker container..."
 check_container_availability() {
-  docker exec -it "$NAME" /bin/bash -c "$INSERT_KEY"
-  if [ $? -gt 0 ]; then
+  docker exec -it "$NAME" /bin/bash -c "$INSERT_KEY" 2>&1 | grep -q running
+  if [ $? -eq 0 ]; then
+    # if docker bails with an error, put it here
+    docker logs $NAME 2>&1 | grep -q "ERROR!! "
+    if [[ $? -eq 0 ]]; then
+
+      # if docker bails with oauth token missing error, generate it..
+      docker logs $NAME 2>&1 | grep -q "oauth"
+      if [[ $? -eq 0 ]]; then
+        URL=$(docker run name:$NAME /bin/bash -c "acd_cli init 2>/dev/null | grep -o 'https*://[^\"]*\/'")
+        echo "Opening $URL to request access token. Save to .$IMPORT_DIR on login."
+        read -r -p "I am ready. [Y/n]" RESPONSE
+        open $URL
+        . $0 # recurse script with token now created
+        exit 0
+      fi
+
+      docker logs $NAME
+      echo "An error has occurred. See log output above."
+      exit 1
+    fi
+
     sleep 3
     check_container_availability
   fi
@@ -86,11 +117,27 @@ echo "Waiting for ssh..."
 check_ssh_availability() {
   ssh -p $SSH_PORT -q -o $SSH_OPTS root@localhost exit
   if [ $? -gt 0 ]; then
+    # if docker bails with an error, put it here
+    docker logs $NAME 2>&1 | grep -q "ERROR!! "
+    if [[ $? -eq 0 ]]; then
+      docker logs $NAME
+      echo "An error has occurred. See log output above."
+      exit 1
+    fi
+
     sleep 3
     check_ssh_availability
   fi
 }
 check_ssh_availability
+
+# if docker bails with an error, put it here
+docker logs $NAME 2>&1 | grep -q Traceback
+if [[ $? -eq 0 ]]; then
+  docker logs $NAME
+  echo "An error has occurred. See log output above."
+  exit 1
+fi
 
 # touch file to sshfs dir to test
 echo "Mount Amazon Cloud Drive FUSE directory on host machine @ $PWD/$NAME"
@@ -102,3 +149,12 @@ sshfs -p $SSH_PORT -o $SSH_OPTS root@localhost:/"$NAME" "$NAME"
 echo "Creating symlink @ $PLACE_SYMLINK_AT$NAME"
 rm -rf "$PLACE_SYMLINK_AT""$NAME"
 ln -s "$PWD"/"$NAME"/ "$PLACE_SYMLINK_AT"
+
+# NOTICE
+echo "!!! NOTICE !!!"
+echo ""
+echo "A KEY HAS BEEN CREATED FOR YOU AT $IMPORT_DIR/ACD_DATA_KEY"
+echo "ANY FILES YOU ENCRYPT _REQUIRE_ THIS KEY *AND* YOUR PASSWORD TO DECRYPT"
+echo "LOSE EITHER AND YOUR DATA CAN *NOT* BE RECOVERED!"
+echo ""
+echo "!!! NOTICE !!!"

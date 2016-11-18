@@ -1,7 +1,14 @@
 #!/bin/bash
 
 if [ -z "$ENC_PASSWORD" ]; then
-  echo "\$ENC_PASSWORD is a required environment variable!!"
+  echo -e "\nERROR!! ENC_PASSWORD is a required environment variable!!"
+  exit 1
+fi
+if [ ! -f "$OAUTH_DATA" ]; then
+  echo -e "\nERROR!! $OAUTH_DATA not found!"
+  echo ""
+  echo "This file is created via the acd_cli tool, and requires a web browser."
+  echo "Ref: https://github.com/yadayada/acd_cli/blob/master/docs/authorization.rst#simple-appspot"
   exit 1
 fi
 
@@ -17,7 +24,6 @@ ENCRYPT_PW="echo $ENC_PASSWORD"
 # make directories to be used
 mkdir -p "$DEC_DATA_DIR" "$ENC_DATA_DIR" "$DEC_AMZN_DIR" "$ENC_AMZN_DIR" "$FUSED_DIR" ~/.cache/acd_cli
 
-# if no key is being imported,
 if [ ! -f "$KEY" ]; then
   # specify dir in which to store encrypted and unencrypted files, in that order
   encfs --standard --extpass="$ENCRYPT_PW" "$ENC_DATA_DIR" "$DEC_DATA_DIR"
@@ -28,6 +34,11 @@ if [ ! -f "$KEY" ]; then
 else
   echo "FOUND PRE-EXISTING KEY TO IMPORT. USING: $KEY"
   ENCFS6_CONFIG="$KEY" encfs --extpass="$ENCRYPT_PW" "$ENC_DATA_DIR" "$DEC_DATA_DIR"
+
+  if [[ $? -eq 1 ]]; then
+    echo -e "\nERROR!! encryption layer failure!"
+    exit 1
+  fi
 fi
 
 # fuse local drive directory with clouddrive directory
